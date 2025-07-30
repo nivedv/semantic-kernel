@@ -1,10 +1,11 @@
-import asyncio
 import os
+import asyncio
+from dotenv import load_dotenv
 from semantic_kernel import Kernel
 from semantic_kernel.agents import ChatCompletionAgent, ChatHistoryAgentThread
 from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion
 from semantic_kernel.filters import FunctionInvocationContext
-
+import pdfplumber
 """
 The following sample demonstrates how to create Chat Completion Agents
 and use them as tools available for a Triage Agent to delegate requests
@@ -12,12 +13,33 @@ to the appropriate agent. A Function Invocation Filter is used to show
 the function call content and the function result content so the caller
 can see which agent was called and what the response was.
 """
+
 async def main() -> None:
+    
     print("Welcome to the chat bot!\n  Type 'exit' to exit.\n  Try to get some billing or refund help.")
     chatting = True
     while chatting:
         chatting = await chat()
-
+# reaf pdf
+def load_refund_policy_pdf():
+    """Load and extract text from the refund policy PDF using pdfplumber."""
+    pdf_path = os.path.join(os.path.dirname(__file__), "ref_data", "refund_policy.pdf")
+    
+    if not os.path.exists(pdf_path):
+        print(f"Warning: Refund policy PDF not found at {pdf_path}")
+        return ""
+    
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            policy_text = ""
+            for page in pdf.pages:
+                text = page.extract_text()
+                if text:  # Check if text was extracted
+                    policy_text += text + "\n"
+        return policy_text
+    except Exception as e:
+        print(f"Error reading PDF: {e}")
+        return ""
 # Define the auto function invocation filter that will be used by the kernel
 async def function_invocation_filter(context: FunctionInvocationContext, next):
     """A filter that will be called for each function call in the response."""
@@ -29,14 +51,17 @@ async def function_invocation_filter(context: FunctionInvocationContext, next):
     print(f"    Response from agent [{context.function.name}]: {context.result.value}")
 
 
-# Create and configure the kernel.
 kernel = Kernel()
-
+# Load the policy text
+refund_policy_text = load_refund_policy_pdf()
 # The filter is used for demonstration purposes to show the function invocation.
 kernel.add_filter("function_invocation", function_invocation_filter)
-
 billing_agent = ChatCompletionAgent(
-    service=AzureChatCompletion(),
+    service=AzureChatCompletion(
+        api_key="ADsXZ7WzOwtM3rcb1eKXg4lucVXt9WPxVKHcMIgT7u9otoagzloCJQQJ99BGACHYHv6XJ3w3AAAAACOG7iyf",
+        endpoint="https://25sha1639trainer1-5415-resource.openai.azure.com/",
+        deployment_name="gpt-4o"
+    ),
     name="BillingAgent",
     instructions=(
         "You specialize in handling customer questions related to billing issues. "
@@ -48,19 +73,29 @@ billing_agent = ChatCompletionAgent(
 )
 
 refund_agent = ChatCompletionAgent(
-    service=AzureChatCompletion(),
+    service=AzureChatCompletion(
+        api_key="ADsXZ7WzOwtM3rcb1eKXg4lucVXt9WPxVKHcMIgT7u9otoagzloCJQQJ99BGACHYHv6XJ3w3AAAAACOG7iyf",
+        endpoint="https://25sha1639trainer1-5415-resource.openai.azure.com/",
+        deployment_name="gpt-4o"
+    ),
     name="RefundAgent",
     instructions=(
         "You specialize in addressing customer inquiries regarding refunds. "
-        "This includes evaluating eligibility for refunds, explaining refund policies, "
-        "processing refund requests, providing status updates on refunds, handling complaints related to refunds, "
-        "and guiding customers through the refund claim process. "
-        "Your goal is to assist users clearly and empathetically to successfully resolve their refund-related concerns."
+        "Use the following refund policy document to provide accurate information:\n\n"
+        f"REFUND POLICY:\n{refund_policy_text}\n\n"
+        "Base all refund-related answers on this official policy. "
+        "If a customer's situation isn't covered in the policy, clearly state that "
+        "and suggest they contact customer service for special consideration. "
+        "Always quote relevant sections of the policy when applicable."
     ),
 )
 
 triage_agent = ChatCompletionAgent(
-    service=AzureChatCompletion(),
+    service=AzureChatCompletion(
+        api_key="ADsXZ7WzOwtM3rcb1eKXg4lucVXt9WPxVKHcMIgT7u9otoagzloCJQQJ99BGACHYHv6XJ3w3AAAAACOG7iyf",
+        endpoint="https://25sha1639trainer1-5415-resource.openai.azure.com/",
+        deployment_name="gpt-4o"
+    ),
     kernel=kernel,
     name="TriageAgent",
     instructions=(
@@ -136,26 +171,6 @@ Agent :> To address your concern about being charged twice and seeking a refund 
 Once we have these details, we can proceed with resolving the duplicate charge and consider your refund request. If you 
 have any more questions, feel free to ask!
 """
-# load data from pdf
-def load_refund_policy_pdf():
-    """Load and extract text from the refund policy PDF using pdfplumber."""
-    pdf_path = os.path.join(os.path.dirname(__file__), "ref_data", "refund_policy.pdf")
-    
-    if not os.path.exists(pdf_path):
-        print(f"Warning: Refund policy PDF not found at {pdf_path}")
-        return ""
-    
-    try:
-        with pdfplumber.open(pdf_path) as pdf:
-            policy_text = ""
-            for page in pdf.pages:
-                text = page.extract_text()
-                if text:  # Check if text was extracted
-                    policy_text += text + "\n"
-        return policy_text
-    except Exception as e:
-        print(f"Error reading PDF: {e}")
-        return ""
 
 
 
